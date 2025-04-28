@@ -56,14 +56,32 @@ static async Task UpdateHandler(ITelegramBotClient botClient, Update update, Can
                         // message type text
                         case MessageType.Text:
                             {
+                                var groqService = new GroqService(Constants.apiKeyGroq);
+
                                 // start message
                                 if (message.Text == "/start")
                                 {
                                     await StartMessage(botClient, update, cancellationToken);
                                     return;
                                 }
+                                else
+                                {
+                                    if (update.Message is null || message.Text is null)
+                                    {
+                                        return;
+                                    }
 
-                                return;
+                                    var chatId = update.Message.Chat.Id;
+                                    var groqAnswer = await groqService.GetGroqResponseAsync(message.Text);
+
+                                    await botClient.SendMessage(
+                                        chatId: chatId,
+                                        text: groqAnswer,
+                                        cancellationToken: cancellationToken
+                                    );
+
+                                    return;
+                                }
                             }
                         // photo type of message
                         case MessageType.Photo:
@@ -108,10 +126,12 @@ static async Task StartMessage(ITelegramBotClient botClient, Update update, Canc
         return;
     }
 
-    string welcomeText = "Hello! I'm a bot that helps with car insurance.\nI'll help you get insurance.\n" +
-        "Please, submit a photo of your passport and vehicle identification document.";
+    var groqService = new GroqService(Constants.apiKeyGroq);
+    var responseFromGroq = await groqService.GetGroqResponseAsync("User starts a conversation with Telegram chat bot for " +
+        "assistance with car insurance, " +
+        "so the bot (you) should introduce itself and explain that its purpose is to assist with car insurance purchases.");
 
-    await botClient.SendMessage(update.Message.Chat.Id, text: welcomeText, replyMarkup: AskingDocumentKeyboard(),
+    await botClient.SendMessage(update.Message.Chat.Id, text: responseFromGroq, replyMarkup: AskingDocumentKeyboard(),
         cancellationToken: cancellationToken); // sending message with text and input keyboard
 }
 
@@ -143,6 +163,7 @@ static async Task AskingDocumentCallbackQuery(ITelegramBotClient botClient, Upda
     }
 
     var chatId = callbackQuery.Message.Chat.Id;
+    var groqService = new GroqService(Constants.apiKeyGroq);
 
     // if user didn't send any photos before, he will be added to dictionary with user documents
     if (!userStates.ContainsKey(chatId))
@@ -157,18 +178,25 @@ static async Task AskingDocumentCallbackQuery(ITelegramBotClient botClient, Upda
     {
         userState.WaitingFor = "Passport"; // bot waiting for photo of passport
 
+        var responseFromGroq = await groqService.GetGroqResponseAsync("User press button for sending photo of their passport. " +
+            "You should say that you are waiting for photo of their passport.");
+
         await botClient.SendMessage(
             chatId: chatId,
-            text: "I'm waiting for a photo of your passport.",
+            text: responseFromGroq,
             cancellationToken: cancellationToken); // sending message that bot wait for photo of passport
     }
     else if (callbackQuery.Data == "Vehicle identification document")
     {
         userState.WaitingFor = "Vehicle identification document";
 
+        var responseFromGroq = await groqService.GetGroqResponseAsync("User press button for sending photo of their " +
+            "vehicle identification document. " +
+            "You should say that you are waiting for photo of their vehicle identification document.");
+
         await botClient.SendMessage(
             chatId: chatId,
-            text: "I'm waiting for a photo of your vehicle identification document.",
+            text: responseFromGroq,
             cancellationToken: cancellationToken);
     }
     // if button is yes or no we call confirmation of extracted information from photos
@@ -197,13 +225,17 @@ static async Task AskingDocumentPhoto(ITelegramBotClient botClient, Update updat
     }
 
     var chatId = update.Message.Chat.Id;
+    var groqService = new GroqService(Constants.apiKeyGroq);
 
     // if we haven't user at the dictionary of user document's
     if (!userStates.ContainsKey(chatId))
     {
+        var responseFromGroq = await groqService.GetGroqResponseAsync("User doesn't press button to choose which document they " +
+            "want to send. You should say that user should press button to choose which document they want to send.");
+
         await botClient.SendMessage(
             chatId: chatId,
-            text: "Please, select a document using the buttons first.",
+            text: responseFromGroq,
             cancellationToken: cancellationToken);
         return;
     }
@@ -213,6 +245,9 @@ static async Task AskingDocumentPhoto(ITelegramBotClient botClient, Update updat
     // if user don't pressed any button
     if (userState.WaitingFor == null)
     {
+        var responseFromGroq = await groqService.GetGroqResponseAsync("User doesn't press button to choose which document they " +
+            "want to send. You should say that user should press button to choose which document they want to send.");
+
         await botClient.SendMessage(
             chatId: chatId,
             text: "Please, select a document using the buttons first.",
@@ -226,9 +261,12 @@ static async Task AskingDocumentPhoto(ITelegramBotClient botClient, Update updat
         userState.PassportReceived = true; // passport received
         userState.WaitingFor = ""; // clearing bot's waiting for
 
+        var responseFromGroq = await groqService.GetGroqResponseAsync("User sent a photo of their passport. " +
+            "You should inform user that chat (you) received a photo of their passport.");
+
         await botClient.SendMessage(
             chatId: chatId,
-            text: "Passport received.",
+            text: responseFromGroq,
             cancellationToken: cancellationToken); // sending message that passport received by bot
     }
     else if (userState.WaitingFor == "Vehicle identification document")
@@ -236,9 +274,12 @@ static async Task AskingDocumentPhoto(ITelegramBotClient botClient, Update updat
         userState.VehicleDocReceived = true;
         userState.WaitingFor = "";
 
+        var responseFromGroq = await groqService.GetGroqResponseAsync("User sent a photo of their " +
+            "vehicle identification document. You should inform user that chat (you) received a photo of their passport.");
+
         await botClient.SendMessage(
             chatId: chatId,
-            text: "Vehicle document received.",
+            text: responseFromGroq,
             cancellationToken: cancellationToken);
     }
 
@@ -246,10 +287,12 @@ static async Task AskingDocumentPhoto(ITelegramBotClient botClient, Update updat
     if (userState.PassportReceived && userState.VehicleDocReceived)
     {
         var extractedData = await ExtractDataAsync(); // mock Mindee API extract data from sended documents
+        var responseFromGroq = await groqService.GetGroqResponseAsync($"User sent a both of document's photos. " +
+            $"Display the extracted data to the user for confirmation. You have this extracted data: {extractedData}.");
+
         await botClient.SendMessage(
             chatId: chatId,
-            text: $"Thank you! Both documents received. " +
-            $"I found the following data:\n\n{extractedData}\n\nIs everything correct?", // sending message with extracted data
+            text: responseFromGroq, // sending message with extracted data
             replyMarkup: AskingConfirmationDataKeyboard(), // input keyboard which help agree or disagree with extracted data
             cancellationToken: cancellationToken);
     }
@@ -266,9 +309,12 @@ static async Task AskingDocumentPhoto(ITelegramBotClient botClient, Update updat
                 },
             }
         );
+
+        var responseFromGroq = await groqService.GetGroqResponseAsync("Prompt the user to submit a photo of their passport.");
+
         await botClient.SendMessage(
             chatId: chatId,
-            text: "Please send a photo of your passport.", // sending message which ask to send passport
+            text: responseFromGroq, // sending message which ask to send passport
             replyMarkup: inlineKeyboard, // inline keyboard with prompt to send passport
             cancellationToken: cancellationToken);
     }
@@ -284,9 +330,13 @@ static async Task AskingDocumentPhoto(ITelegramBotClient botClient, Update updat
                 },
             }
         );
+
+        var responseFromGroq = await groqService.GetGroqResponseAsync("Prompt the user to submit a photo " +
+            "of their vehicle identification document.");
+
         await botClient.SendMessage(
             chatId: chatId,
-            text: "Please send a photo of your vehicle identification document.",
+            text: responseFromGroq,
             replyMarkup: inlineKeyboard,
             cancellationToken: cancellationToken);
     }
@@ -345,6 +395,7 @@ static async Task AskingDocumentConfirmationCallbackQuery(ITelegramBotClient bot
     }
 
     var userState = userStates[chatId];
+    var groqService = new GroqService(Constants.apiKeyGroq);
 
     if (callbackQuery.Data == "No")
     {
@@ -352,20 +403,26 @@ static async Task AskingDocumentConfirmationCallbackQuery(ITelegramBotClient bot
         userState.VehicleDocReceived = false;
         userState.WaitingFor = "";
 
+        var responseFromGroq = await groqService.GetGroqResponseAsync("User disagrees with the extracted data, " +
+            "so the bot (you) request that they retake and resubmit the photo");
+
         // if extracted data isn't correct and user said about it, chat ask to retake and resend photos
         await botClient.SendMessage(
             chatId: chatId,
-            text: "Sorry for my mistake. Please, retake and resubmit photos.",
+            text: responseFromGroq,
             replyMarkup: AskingDocumentKeyboard(),
             cancellationToken: cancellationToken);
     }
     // if user said that extracted data is correct, chat say about price for the insurance
     else if (callbackQuery.Data == "Yes")
     {
+        var responseFromGroq = await groqService.GetGroqResponseAsync("User sagrees with the extracted data, so the bot (you) " +
+            "should inform the user that the fixed price for the insurance is 100 USD. " +
+            "Ask the user if they agree with the price.");
+
         await botClient.SendMessage(
             chatId: chatId,
-            text: "Well, now I want to inform you that the fixed price for the insurance is 100 USD." +
-            "\nDo you agree with this price?",
+            text: responseFromGroq,
             replyMarkup: AskingPriceConfirmationKeyboard(), // input keyboard to agree or disagree with price of insurance
             cancellationToken: cancellationToken);
     }
@@ -402,24 +459,25 @@ static async Task AskingPriceConfirmationCallbackQuery(ITelegramBotClient botCli
     }
 
     var chatId = callbackQuery.Message.Chat.Id;
+    var groqService = new GroqService(Constants.apiKeyGroq);
 
     // user disagreed with price
     if (callbackQuery.Data == "NoPrice")
     {
+        var responseFromGroq = await groqService.GetGroqResponseAsync("User disagrees with the fixed price for the insurance " +
+            "which 100 USD, so the bot (you) should apologize and explain that 100 USD is the only available price. " +
+            "After ask user if they want to continue");
+
         await botClient.SendMessage(
             chatId: chatId,
             // chat say that price is fixed
-            text: "I apologize, but 100 USD is the only available price. Do you want to continue?",
+            text: responseFromGroq,
             replyMarkup: AskingPriceConfirmationKeyboard(), // input keyboard for agree or disagree
             cancellationToken: cancellationToken);
     }
     // user agreed with price
     else if (callbackQuery.Data == "YesPrice")
     {
-        await botClient.SendMessage(
-            chatId: chatId,
-            text: "Okay, I'll send you your dummy insurance policy document.",
-            cancellationToken: cancellationToken);
         await GenerateDummyInsurancePolicyDocument(botClient, update, cancellationToken); // sending maked insurance
     }
 

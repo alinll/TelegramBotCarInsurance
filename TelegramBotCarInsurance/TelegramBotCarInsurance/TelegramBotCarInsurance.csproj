@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="QuestPDF" Version="2025.4.0" />
     <PackageReference Include="Telegram.Bot" Version="22.5.1" />
   </ItemGroup>
 
