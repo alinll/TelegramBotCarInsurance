@@ -439,54 +439,23 @@ static async Task GenerateDummyInsurancePolicyDocument(ITelegramBotClient botCli
 
         var chatId = update.CallbackQuery.Message.Chat.Id;
         string extractedData = await ExtractDataAsync();
-        string dummyInsurancePolicyText = await MockOpenAiGenerateInsurancePolicy(extractedData);
-        string tempFilePath = Path.GetRandomFileName();
-        string insurancePolicyFilePath = Path.ChangeExtension(tempFilePath, ".txt");
+        var groqService = new GroqService(Constants.apiKeyGroq);
+        string policyText = await groqService.GenerateDummyInsurancePolicyAsync(extractedData);
 
-        await File.WriteAllTextAsync(insurancePolicyFilePath, dummyInsurancePolicyText, cancellationToken);
+        string pdfPath = Path.Combine("Documents", $"InsurancePolicy_{chatId}.pdf");
+        Directory.CreateDirectory("Documents");
+        await PdfService.GeneratePdfAsync(policyText, pdfPath);
 
-        using var fileStream = File.OpenRead(insurancePolicyFilePath);
-        var inputFile = new InputFileStream(fileStream, Path.GetFileName(insurancePolicyFilePath));
-
+        using var fileStream = File.OpenRead(pdfPath);
         await botClient.SendDocument(
             chatId: chatId,
-            document: inputFile,
-            caption: "Here is your insurance policy. Thank you for your purchase!",
+            document: new InputFileStream(fileStream, $"InsurancePolicy_{chatId}.pdf"),
+            caption: "Here is your insurance policy document. Thank you for your purchase!",
             cancellationToken: cancellationToken
         );
-
-        File.Delete(insurancePolicyFilePath);
     }
     catch (Exception ex)
     {
         Console.WriteLine(ex.ToString());
     }
-}
-
-//This is just a custom mock of Open AI API
-static async Task<string> MockOpenAiGenerateInsurancePolicy(string extractedData)
-{
-    await Task.Delay(1000);
-
-    return $@"
-INSURANCE POLICY
-==================
-
-Extracted Information:
-{extractedData}
-
-Policy Number: {Guid.NewGuid()}
-Valid From: {DateTime.UtcNow:dd.MM.yyyy}
-Valid To: {DateTime.UtcNow.AddYears(1):dd.MM.yyyy}
-
-Coverage:
-- Full coverage for vehicle damages
-- Theft protection
-- Roadside assistance
-
-Issued by: Car Insurance Bot
-Date of Issue: {DateTime.UtcNow:dd.MM.yyyy}
-
-Thank you for choosing us!
-";
 }
