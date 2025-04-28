@@ -426,7 +426,7 @@ static async Task AskingPriceConfirmationCallbackQuery(ITelegramBotClient botCli
     await botClient.AnswerCallbackQuery(callbackQuery.Id, cancellationToken: cancellationToken);
 }
 
-//This is just a custom mock of Open AI API
+//This is usage of a custom mock of Open AI API
 static async Task GenerateDummyInsurancePolicyDocument(ITelegramBotClient botClient, Update update,
     CancellationToken cancellationToken)
 {
@@ -438,21 +438,55 @@ static async Task GenerateDummyInsurancePolicyDocument(ITelegramBotClient botCli
         }
 
         var chatId = update.CallbackQuery.Message.Chat.Id;
-        using var fileStream = File.OpenRead(Constants.filePathDummyInsurancePolicyDocument); // reading file
+        string extractedData = await ExtractDataAsync();
+        string dummyInsurancePolicyText = await MockOpenAiGenerateInsurancePolicy(extractedData);
+        string tempFilePath = Path.GetRandomFileName();
+        string insurancePolicyFilePath = Path.ChangeExtension(tempFilePath, ".txt");
 
-        // choosing file
-        var inputFile = new InputFileStream(fileStream, Path.GetFileName(Constants.filePathDummyInsurancePolicyDocument));
+        await File.WriteAllTextAsync(insurancePolicyFilePath, dummyInsurancePolicyText, cancellationToken);
 
-        // sending choosed file
+        using var fileStream = File.OpenRead(insurancePolicyFilePath);
+        var inputFile = new InputFileStream(fileStream, Path.GetFileName(insurancePolicyFilePath));
+
         await botClient.SendDocument(
             chatId: chatId,
             document: inputFile,
             caption: "Here is your insurance policy. Thank you for your purchase!",
             cancellationToken: cancellationToken
         );
+
+        File.Delete(insurancePolicyFilePath);
     }
     catch (Exception ex)
     {
         Console.WriteLine(ex.ToString());
     }
+}
+
+//This is just a custom mock of Open AI API
+static async Task<string> MockOpenAiGenerateInsurancePolicy(string extractedData)
+{
+    await Task.Delay(1000);
+
+    return $@"
+INSURANCE POLICY
+==================
+
+Extracted Information:
+{extractedData}
+
+Policy Number: {Guid.NewGuid()}
+Valid From: {DateTime.UtcNow:dd.MM.yyyy}
+Valid To: {DateTime.UtcNow.AddYears(1):dd.MM.yyyy}
+
+Coverage:
+- Full coverage for vehicle damages
+- Theft protection
+- Roadside assistance
+
+Issued by: Car Insurance Bot
+Date of Issue: {DateTime.UtcNow:dd.MM.yyyy}
+
+Thank you for choosing us!
+";
 }
