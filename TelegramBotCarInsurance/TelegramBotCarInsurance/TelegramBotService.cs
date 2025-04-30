@@ -60,6 +60,11 @@ namespace TelegramBotCarInsurance
                                         await AskingDocumentPhoto(botClient, update, userStates, cancellationToken);
                                         return;
                                     }
+                                case MessageType.Photo:
+                                    {
+                                        await AskingDocumentPhoto(botClient, update, userStates, cancellationToken);
+                                        return;
+                                    }
                             }
                             return;
                         }
@@ -186,7 +191,7 @@ namespace TelegramBotCarInsurance
         {
             try
             {
-                if (update.Message is null || update.Message.Document is null)
+                if (update.Message is null || (update.Message.Document is null && update.Message.Photo is null))
                 {
                     return;
                 }
@@ -215,12 +220,14 @@ namespace TelegramBotCarInsurance
                     return;
                 }
 
+                string fileId = update.Message.Document?.FileId ?? update.Message.Photo?.Last().FileId;
+
                 // if user choosed send passport, bot waiting for passport document
                 if (userState.WaitingFor == "Passport")
                 {
                     userState.PassportReceived = true; // passport received
                     userState.WaitingFor = ""; // clearing bot's waiting for
-                    userState.PassportFileId = update.Message.Document.FileId;
+                    userState.PassportFileId = fileId;
 
                     await botClient.SendMessage(
                         chatId: chatId,
@@ -232,7 +239,7 @@ namespace TelegramBotCarInsurance
                 {
                     userState.VehicleDocReceived = true;
                     userState.WaitingFor = "";
-                    userState.VehicleFileId = update.Message.Document.FileId;
+                    userState.VehicleFileId = fileId;
 
                     await botClient.SendMessage(
                         chatId: chatId,
@@ -484,7 +491,6 @@ namespace TelegramBotCarInsurance
             }
         }
 
-        //This is usage of a custom mock of Open AI API
         static async Task GenerateDummyInsurancePolicyDocument(ITelegramBotClient botClient, Update update,
             Dictionary<long, UserDocuments> userStates, CancellationToken cancellationToken)
         {
