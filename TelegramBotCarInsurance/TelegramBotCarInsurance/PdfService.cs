@@ -18,7 +18,6 @@ namespace TelegramBotCarInsurance
                         {
                             page.Size(PageSizes.A4);
                             page.Margin(50);
-
                             page.Content().Text(text, TextStyle.Default.Size(16));
                         });
                     });
@@ -29,7 +28,7 @@ namespace TelegramBotCarInsurance
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.ToString());
+                return ex.Message.ToString();
             }
 
             return outputPath;
